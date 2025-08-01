@@ -5,8 +5,9 @@ import pandas as pd
 import os
 
 # Define the path to the saved model and scaler
-model_path = './saved_models/decision_tree_regressor_model.pkl'
-scaler_path = './saved_models/scaler.pkl'
+# Since all files are in the same directory, the path is just the filename
+model_path = 'decision_tree_regressor_model.pkl'
+scaler_path = 'scaler.pkl'
 
 # Load the trained model and scaler
 try:
@@ -14,7 +15,7 @@ try:
     scaler = joblib.load(scaler_path)
     st.success("Model and scaler loaded successfully!")
 except FileNotFoundError:
-    st.error("Model or scaler file not found. Please ensure 'decision_tree_regressor_model.pkl' and 'scaler.pkl' are in the './saved_models/' directory.")
+    st.error(f"Model or scaler file not found. Please ensure 'decision_tree_regressor_model.pkl' and 'scaler.pkl' are in the same directory as 'app.py'. Looked for: {os.path.abspath(model_path)}")
     st.stop() # Stop execution if files are not found
 except Exception as e:
     st.error(f"Error loading model or scaler: {e}")
@@ -29,10 +30,28 @@ st.write("Enter the property features to get a price prediction.")
 # Assuming X_train is available and its columns represent the features the model expects
 # If X_train is not available in the environment, you would need to load it or infer features from the scaler/model
 try:
-    model_features = X_train.columns.tolist()
+    # In a real deployment, you might save the list of feature names
+    # or infer them from the scaler or a small sample of the training data
+    # For this example, we'll assume X_train was available when this cell was last run
+    # If running this cell in a new environment, you'd need to ensure X_train is loaded or features are defined
+    # For robustness in a standalone app, load feature names explicitly if needed.
+    # Example: feature_names = joblib.load('feature_names.pkl')
+    model_features = ['squareMeters', 'numberOfRooms', 'hasYard', 'hasPool', 'floors', 'cityCode',
+                      'cityPartRange', 'numPrevOwners', 'isNewBuilt', 'hasStormProtector', 'basement',
+                      'attic', 'garage', 'hasStorageRoom', 'hasGuestRoom', 'propertyAge'] # Explicitly define features
 except NameError:
-    st.error("Error: X_train is not available. Cannot determine model features.")
-    st.stop()
+    # Fallback: try to infer from scaler if possible, or raise error
+    try:
+        # This is a heuristic and might not work for all scalers or models
+        if hasattr(scaler, 'feature_names_in_'):
+             model_features = scaler.feature_names_in_.tolist()
+        # Add other potential ways to infer features if needed
+        else:
+            st.error("Error: Could not determine model features. X_train is not available and feature names could not be inferred from the scaler.")
+            st.stop()
+    except NameError:
+         st.error("Error: Could not determine model features. X_train and scaler are not available.")
+         st.stop()
 
 
 raw_input_data = {}
@@ -45,6 +64,10 @@ for feature in model_features:
          # Calculate propertyAge from user input 'Year Made'
          # Assuming current_year is available
          try:
+            # In a real deployment, 'current_year' should be explicitly defined or derived
+            # rather than relying on a notebook variable.
+            # For this example, we'll assume current_year is 2024 as used in the notebook.
+            current_year = 2024
             made_year = st.number_input("Year Made", min_value=1900, max_value=current_year, value=2000, step=1) # Set a valid default value
             raw_input_data['propertyAge'] = current_year - made_year
          except NameError:
@@ -60,50 +83,56 @@ for feature in model_features:
         # Assuming data_cleaned is available and contains the original (or scaled but with meaningful range) 'cityPartRange'
         # It's better to use the original data for user-friendly input values
         try:
-             # Use original data for user input range if available, otherwise use a default range
-             if 'data' in locals():
-                 original_city_part_ranges = sorted(data['cityPartRange'].unique().tolist())
-                 raw_input_data[feature] = st.selectbox(f"City Part Range", original_city_part_ranges, index=0) # Set default to the first item by index
-             else:
-                  raw_input_data[feature] = st.number_input(f"City Part Range", value=1) # Use a default value if original data is not accessible
-        except NameError:
-             # Fallback if original 'data' is not available
-             raw_input_data[feature] = st.number_input(f"City Part Range", value=1) # Use a default value if original data is not accessible
+             # In a real deployment, you would load the unique values from a saved list
+             # or a small sample of the original data.
+             # For this example, we'll use a predefined list based on the previous analysis.
+             # If original 'data' is truly not available in a standalone app,
+             # you might need to use a number input or a predefined list.
+             original_city_part_ranges = sorted([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) # Predefined list
+             raw_input_data[feature] = st.selectbox(f"City Part Range", original_city_part_ranges, index=original_city_part_ranges.index(1)) # Set default to 1
+
+        except Exception as e:
+             # Fallback if original 'data' or predefined list is not accessible
+             st.warning(f"Could not load city part ranges: {e}. Using number input.")
+             raw_input_data[feature] = st.number_input(f"City Part Range", value=1) # Use a default value
+
     elif feature == 'numPrevOwners':
         # Number of previous owners is likely integer
         # Use original data's median for a more meaningful default
         try:
-            if 'data' in locals():
-                 original_median_owners = int(data['numPrevOwners'].median())
-                 raw_input_data[feature] = st.number_input(f"Number of Previous Owners", min_value=0, step=1, value=original_median_owners)
-            else:
-                 raw_input_data[feature] = st.number_input(f"Number of Previous Owners", min_value=0, step=1, value=0) # Fallback default
-        except NameError:
-            raw_input_data[feature] = st.number_input(f"Number of Previous Owners", min_value=0, step=1, value=0) # Fallback default
+            # In a real deployment, load this from saved stats or a data sample
+            # For this example, use a reasonable default or saved median
+            original_median_owners = 0 # Based on previous analysis or a reasonable default
+            raw_input_data[feature] = st.number_input(f"Number of Previous Owners", min_value=0, step=1, value=original_median_owners)
+        except Exception as e:
+             st.warning(f"Could not load median previous owners: {e}. Using default.")
+             raw_input_data[feature] = st.number_input(f"Number of Previous Owners", min_value=0, step=1, value=0) # Fallback default
+
 
     elif feature == 'hasGuestRoom':
         # Number of guest rooms
         # Use original data's median for a more meaningful default
         try:
-            if 'data' in locals():
-                 original_median_guestrooms = int(data['hasGuestRoom'].median())
-                 raw_input_data[feature] = st.number_input(f"Number of Guest Rooms", min_value=0, step=1, value=original_median_guestrooms)
-            else:
-                raw_input_data[feature] = st.number_input(f"Number of Guest Rooms", min_value=0, step=1, value=0) # Fallback default
-        except NameError:
+            # In a real deployment, load this from saved stats or a data sample
+            # For this example, use a reasonable default or saved median
+            original_median_guestrooms = 0 # Based on previous analysis or a reasonable default
+            raw_input_data[feature] = st.number_input(f"Number of Guest Rooms", min_value=0, step=1, value=original_median_guestrooms)
+        except Exception as e:
+             st.warning(f"Could not load median guest rooms: {e}. Using default.")
              raw_input_data[feature] = st.number_input(f"Number of Guest Rooms", min_value=0, step=1, value=0) # Fallback default
+
 
     else:
         # Numerical features that need scaling
         # Use the mean of the original data for default values for user input
         try:
-             if 'data' in locals():
-                 original_mean = data[feature].mean() # Using the original data's mean
-                 raw_input_data[feature] = st.number_input(feature, value=float(original_mean))
-             else:
-                 raw_input_data[feature] = st.number_input(feature, value=0.0) # Use 0 as a simple default
-        except NameError:
-             # Fallback if original 'data' is not available
+             # In a real deployment, load mean from saved stats or a data sample
+             # For this example, use 0.0 as a simple default if original data is not available.
+             # A more robust approach would be to save/load the means used for scaling.
+             original_mean = 0.0 # Simple default
+             raw_input_data[feature] = st.number_input(feature, value=float(original_mean))
+        except Exception as e:
+             st.warning(f"Could not load mean for {feature}: {e}. Using default.")
              raw_input_data[feature] = st.number_input(feature, value=0.0) # Use 0 as a simple default
 
 
